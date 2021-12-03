@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Instant;
 
+mod day_01;
+
 lazy_static! {
     static ref CHALLENGE_PATTERN: Regex =
         Regex::new("(?i)(?:Day\\W*)?(\\d\\d?)\\W*([AB])").unwrap();
@@ -14,6 +16,8 @@ lazy_static! {
         use Part::*;
 
         let mut builder = HashMap::new();
+
+        builder.insert(Challenge::new(Day01, PartA), box_solution(day_01::part_a));
 
         builder
     };
