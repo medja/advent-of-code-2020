@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::time::Instant;
 
 mod day_01;
+mod day_02;
 
 lazy_static! {
     static ref CHALLENGE_PATTERN: Regex =
@@ -19,6 +20,7 @@ lazy_static! {
 
         builder.insert(Challenge::new(Day01, PartA), box_solution(day_01::part_a));
         builder.insert(Challenge::new(Day01, PartB), box_solution(day_01::part_b));
+        builder.insert(Challenge::new(Day02, PartA), box_solution(day_02::part_a));
 
         builder
     };
@@ -30,12 +32,14 @@ lazy_static! {
 #[repr(u8)]
 pub enum Day {
     Day01 = 1,
+    Day02 = 2,
 }
 
 impl Day {
     fn name(&self) -> &'static str {
         match self {
             Day::Day01 => "Report Repair",
+            Day::Day02 => "Password Philosophy",
         }
     }
 
