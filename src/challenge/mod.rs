@@ -18,6 +18,7 @@ lazy_static! {
         let mut builder = HashMap::new();
 
         builder.insert(Challenge::new(Day01, PartA), box_solution(day_01::part_a));
+        builder.insert(Challenge::new(Day01, PartB), box_solution(day_01::part_b));
 
         builder
     };
