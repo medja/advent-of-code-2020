@@ -1,20 +1,18 @@
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
+    Ok(Map::new(input).simulate(3, 1))
+}
+
+pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
     let map = Map::new(input);
-    let (mut x, mut y) = (0, 0);
-    let mut count = 0;
+    let mut product = 1usize;
 
-    loop {
-        match map.is_tree(x, y) {
-            Some(true) => count += 1,
-            None => break,
-            _ => {}
-        }
+    product *= map.simulate(1, 1);
+    product *= map.simulate(3, 1);
+    product *= map.simulate(5, 1);
+    product *= map.simulate(7, 1);
+    product *= map.simulate(1, 2);
 
-        x += 3;
-        y += 1;
-    }
-
-    Ok(count)
+    Ok(product)
 }
 
 struct Map(Vec<u32>, usize);
@@ -25,6 +23,22 @@ impl Map {
         let lines = lines.iter().map(|&line| Map::parse(line)).collect();
 
         Map(lines, length)
+    }
+
+    fn simulate(&self, dx: usize, dy: usize) -> usize {
+        let (mut x, mut y) = (0, 0);
+        let mut count = 0;
+
+        loop {
+            match self.is_tree(x, y) {
+                Some(true) => count += 1,
+                None => break count,
+                _ => {}
+            }
+
+            x += dx;
+            y += dy;
+        }
     }
 
     fn is_tree(&self, x: usize, y: usize) -> Option<bool> {
