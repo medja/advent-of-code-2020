@@ -1,67 +1,117 @@
-use anyhow::{anyhow, Context};
-use std::mem::{replace, size_of};
+use anyhow::anyhow;
+use std::mem::size_of;
 use std::str::FromStr;
 
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    Ok(simulate(Instruction::parse(input)?))
+    let instructions = Instruction::parse(input)?;
+
+    let mut program = Program::new(&instructions);
+    let mut visited = BitSet::new(instructions.len());
+
+    while visited.set(program.pos()) {
+        program.execute();
+    }
+
+    Ok(program.acc())
 }
 
 pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    simulate_and_patch(Instruction::parse(input)?).context("Could not fix infinite loop")
-}
+    let instructions = Instruction::parse(input)?;
+    let mut destinations = find_destinations(&instructions);
 
-fn simulate(instructions: Vec<Instruction>) -> isize {
+    // Resolve twice to handle both backwards and forward jumps
+    resolve_destinations(&mut destinations);
+    resolve_destinations(&mut destinations);
+
     let mut program = Program::new(&instructions);
-    program.simulate();
-    program.acc()
-}
 
-fn simulate_and_patch(mut instructions: Vec<Instruction>) -> Option<isize> {
-    let mut program = Program::new(&instructions);
-    program.simulate();
+    loop {
+        let instruction = &instructions[program.pos()];
 
-    let visited = program.visited().clone();
-
-    for pos in visited.iter() {
-        let instruction = &mut instructions[pos];
-
-        let alternative = match instruction.operation() {
-            Operation::Jmp if !visited.is_set(pos + 1) => {
-                Instruction::new(Operation::Nop, instruction.value())
-            }
-            Operation::Nop if !visited.is_set(advance_pos(pos, instruction.value())) => {
-                Instruction::new(Operation::Jmp, instruction.value())
-            }
-            _ => continue,
-        };
-
-        let original = replace(instruction, alternative);
-        let mut program = Program::new(&instructions);
-
-        if program.simulate() {
-            return Some(program.acc());
+        if let Some(pos) = find_loop_exit_pos(program.pos(), instruction, &destinations) {
+            program.set_pos(pos);
+            break;
         }
 
-        instructions[pos] = original;
+        program.execute();
     }
 
-    None
+    while program.pos() < instructions.len() {
+        program.execute()
+    }
+
+    Ok(program.acc())
+}
+
+fn find_loop_exit_pos(
+    pos: usize,
+    instruction: &Instruction,
+    destinations: &[usize],
+) -> Option<usize> {
+    let pos = match instruction.operation() {
+        Operation::Jmp => pos + 1,
+        Operation::Nop => advance_pos(pos, instruction.value()),
+        _ => return None,
+    };
+
+    if destinations[pos] == usize::MAX {
+        Some(pos)
+    } else {
+        None
+    }
+}
+
+fn find_destinations(instructions: &[Instruction]) -> Vec<usize> {
+    let mut destinations = vec![0usize; instructions.len()];
+    let mut last_destination = usize::MAX;
+
+    for (pos, instruction) in instructions.iter().enumerate().rev() {
+        if matches!(instruction.operation(), Operation::Jmp) {
+            let next_pos = advance_pos(pos, instruction.value());
+
+            last_destination = if next_pos >= destinations.len() {
+                usize::MAX
+            } else if next_pos > pos {
+                destinations[next_pos]
+            } else {
+                next_pos
+            }
+        }
+
+        if last_destination == pos {
+            last_destination = usize::MIN;
+        }
+
+        destinations[pos] = last_destination;
+    }
+
+    destinations
+}
+
+fn resolve_destinations(destinations: &mut [usize]) {
+    for pos in 0..destinations.len() {
+        let dest = destinations[pos];
+
+        if dest == usize::MIN || dest == usize::MAX {
+            continue;
+        }
+
+        destinations[pos] = destinations[dest];
+    }
 }
 
 struct Program<'a> {
     pos: usize,
     acc: isize,
     instructions: &'a [Instruction],
-    visited: BitSet,
 }
 
 impl<'a> Program<'a> {
     fn new(instructions: &'a [Instruction]) -> Self {
         Program {
-            pos: 0,
-            acc: 0,
+            pos: 0usize,
+            acc: 0isize,
             instructions,
-            visited: BitSet::new(instructions.len()),
         }
     }
 
@@ -69,19 +119,17 @@ impl<'a> Program<'a> {
         self.acc
     }
 
-    fn visited(&self) -> &BitSet {
-        &self.visited
+    fn pos(&self) -> usize {
+        self.pos
     }
 
-    fn simulate(&mut self) -> bool {
-        while self.pos < self.instructions.len() && self.visited.set(self.pos) {
-            self.execute(&self.instructions[self.pos]);
-        }
-
-        self.pos >= self.instructions.len()
+    fn set_pos(&mut self, value: usize) {
+        self.pos = value;
     }
 
-    fn execute(&mut self, instruction: &Instruction) {
+    fn execute(&mut self) {
+        let instruction = &self.instructions[self.pos];
+
         match instruction.operation() {
             Operation::Acc => {
                 self.acc += instruction.value() as isize;
@@ -119,10 +167,6 @@ impl Instruction {
         lines.iter().map(|line| line.parse()).collect()
     }
 
-    fn new(operation: Operation, value: i16) -> Self {
-        Self(operation, value)
-    }
-
     fn operation(&self) -> Operation {
         self.0
     }
@@ -157,27 +201,11 @@ impl BitSet {
         BitSet(vec![0usize; (capacity - 1) / BUCKET_SIZE + 1])
     }
 
-    fn is_set(&self, bit: usize) -> bool {
-        let bucket = bit / BUCKET_SIZE;
-        bucket < self.0.len() && self.0[bucket] >> (bit % BUCKET_SIZE) & 1 == 1
-    }
-
     fn set(&mut self, bit: usize) -> bool {
         let bucket = &mut self.0[bit / BUCKET_SIZE];
         let mask = 1 << (bit % BUCKET_SIZE);
         let is_unset = *bucket & mask == 0;
         *bucket |= mask;
         is_unset
-    }
-
-    fn iter(&self) -> impl Iterator<Item = usize> + '_ {
-        self.0.iter().enumerate().flat_map(|(bucket_idx, bucket)| {
-            let bucket = *bucket;
-            let offset = bucket_idx * BUCKET_SIZE;
-
-            (0..BUCKET_SIZE)
-                .filter(move |idx| bucket >> *idx & 1 == 1)
-                .map(move |idx| idx + offset)
-        })
     }
 }
