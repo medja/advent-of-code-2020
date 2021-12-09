@@ -16,38 +16,40 @@ mod day_07;
 mod day_08;
 mod day_09;
 mod day_10;
+mod day_11;
 
 lazy_static! {
     static ref CHALLENGE_PATTERN: Regex =
         Regex::new("(?i)(?:Day\\W*)?(\\d\\d?)\\W*([AB])").unwrap();
-    static ref SOLUTIONS: HashMap<Challenge, Box<dyn Solution + Sync + 'static>> = {
+    static ref SOLUTIONS: Solutions = {
         use Day::*;
         use Part::*;
 
-        let mut builder = HashMap::new();
+        let mut solutions = Solutions::new();
 
-        builder.insert(Challenge::new(Day01, PartA), box_solution(day_01::part_a));
-        builder.insert(Challenge::new(Day01, PartB), box_solution(day_01::part_b));
-        builder.insert(Challenge::new(Day02, PartA), box_solution(day_02::part_a));
-        builder.insert(Challenge::new(Day02, PartB), box_solution(day_02::part_b));
-        builder.insert(Challenge::new(Day03, PartA), box_solution(day_03::part_a));
-        builder.insert(Challenge::new(Day03, PartB), box_solution(day_03::part_b));
-        builder.insert(Challenge::new(Day04, PartA), box_solution(day_04::part_a));
-        builder.insert(Challenge::new(Day04, PartB), box_solution(day_04::part_b));
-        builder.insert(Challenge::new(Day05, PartA), box_solution(day_05::part_a));
-        builder.insert(Challenge::new(Day05, PartB), box_solution(day_05::part_b));
-        builder.insert(Challenge::new(Day06, PartA), box_solution(day_06::part_a));
-        builder.insert(Challenge::new(Day06, PartB), box_solution(day_06::part_b));
-        builder.insert(Challenge::new(Day07, PartA), box_solution(day_07::part_a));
-        builder.insert(Challenge::new(Day07, PartB), box_solution(day_07::part_b));
-        builder.insert(Challenge::new(Day08, PartA), box_solution(day_08::part_a));
-        builder.insert(Challenge::new(Day08, PartB), box_solution(day_08::part_b));
-        builder.insert(Challenge::new(Day09, PartA), box_solution(day_09::part_a));
-        builder.insert(Challenge::new(Day09, PartB), box_solution(day_09::part_b));
-        builder.insert(Challenge::new(Day10, PartA), box_solution(day_10::part_a));
-        builder.insert(Challenge::new(Day10, PartB), box_solution(day_10::part_b));
+        solutions.add(Day01, PartA, day_01::part_a);
+        solutions.add(Day01, PartB, day_01::part_b);
+        solutions.add(Day02, PartA, day_02::part_a);
+        solutions.add(Day02, PartB, day_02::part_b);
+        solutions.add(Day03, PartA, day_03::part_a);
+        solutions.add(Day03, PartB, day_03::part_b);
+        solutions.add(Day04, PartA, day_04::part_a);
+        solutions.add(Day04, PartB, day_04::part_b);
+        solutions.add(Day05, PartA, day_05::part_a);
+        solutions.add(Day05, PartB, day_05::part_b);
+        solutions.add(Day06, PartA, day_06::part_a);
+        solutions.add(Day06, PartB, day_06::part_b);
+        solutions.add(Day07, PartA, day_07::part_a);
+        solutions.add(Day07, PartB, day_07::part_b);
+        solutions.add(Day08, PartA, day_08::part_a);
+        solutions.add(Day08, PartB, day_08::part_b);
+        solutions.add(Day09, PartA, day_09::part_a);
+        solutions.add(Day09, PartB, day_09::part_b);
+        solutions.add(Day10, PartA, day_10::part_a);
+        solutions.add(Day10, PartB, day_10::part_b);
+        solutions.add(Day11, PartA, day_11::part_a);
 
-        builder
+        solutions
     };
 }
 
@@ -66,6 +68,7 @@ pub enum Day {
     Day08 = 8,
     Day09 = 9,
     Day10 = 10,
+    Day11 = 11,
 }
 
 impl Day {
@@ -83,6 +86,7 @@ impl Day {
             Day08 => "Handheld Halting",
             Day09 => "Encoding Error",
             Day10 => "Adapter Array",
+            Day11 => "Seating System",
         }
     }
 
@@ -177,18 +181,7 @@ impl std::fmt::Display for Challenge {
 }
 
 pub async fn solve(challenge: &Challenge) -> anyhow::Result<()> {
-    let solution = SOLUTIONS
-        .get(challenge)
-        .with_context(|| format!("Cannot find solution for {}", challenge))?;
-
-    let input = challenge.0.input().await?;
-    solution.run(challenge, &input.lines().collect::<Vec<_>>())
-}
-
-fn box_solution<R: std::fmt::Display + 'static>(
-    func: fn(&[&str]) -> anyhow::Result<R>,
-) -> Box<dyn Solution + Sync + 'static> {
-    Box::new(func)
+    SOLUTIONS.solve(challenge).await
 }
 
 trait Solution {
@@ -202,5 +195,32 @@ impl<R: std::fmt::Display> Solution for fn(&[&str]) -> anyhow::Result<R> {
         let duration = start.elapsed();
         println!("{}: {} (duration = {:?})", challenge, result, duration);
         Ok(())
+    }
+}
+
+struct Solutions(HashMap<Challenge, Box<dyn Solution + Sync + 'static>>);
+
+impl Solutions {
+    fn new() -> Self {
+        Solutions(HashMap::new())
+    }
+
+    fn add<R: std::fmt::Display + 'static>(
+        &mut self,
+        day: Day,
+        part: Part,
+        func: fn(&[&str]) -> anyhow::Result<R>,
+    ) {
+        self.0.insert(Challenge::new(day, part), Box::new(func));
+    }
+
+    async fn solve(&self, challenge: &Challenge) -> anyhow::Result<()> {
+        let solution = self
+            .0
+            .get(challenge)
+            .with_context(|| format!("Cannot find solution for {}", challenge))?;
+
+        let input = challenge.0.input().await?;
+        solution.run(challenge, &input.lines().collect::<Vec<_>>())
     }
 }
