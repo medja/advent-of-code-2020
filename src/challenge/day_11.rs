@@ -2,12 +2,19 @@ use std::mem::size_of;
 
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
     let mut layout = SeatLayout::new(input);
-    while layout.simulate() {}
+    while layout.simulate_v1() {}
+    Ok(layout.count_occupied())
+}
+
+pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
+    let mut layout = SeatLayout::new(input);
+    while layout.simulate_v2() {}
     Ok(layout.count_occupied())
 }
 
 const EMPTY_BITS: u8 = 0b00;
 const OCCUPIED_BITS: u8 = 0b01;
+const FLOOR_BITS: u8 = 0b10;
 
 const SEAT_MASK: usize = 0b11;
 const BUCKET_SIZE: usize = size_of::<usize>() * 8;
@@ -20,32 +27,15 @@ struct SeatLayout {
 
 impl SeatLayout {
     fn new(input: &[&str]) -> SeatLayout {
-        let width = input[0].len() + 2;
-        let height = input.len() + 2;
+        let width = input[0].len();
+        let height = input.len();
 
         let mut builder = SeatLayoutBuilder::new(width, height);
 
-        // Add empty seats at the top...
-        for _ in 0..width {
-            builder.add(false);
-        }
-
-        for line in input {
-            // ...left...
-            builder.add(false);
-
-            for byte in line.bytes() {
-                builder.add(byte == b'L')
-            }
-
-            // ...right...
-            builder.add(false);
-        }
-
-        // ...and the bottom
-        for _ in 0..width {
-            builder.add(false);
-        }
+        input
+            .iter()
+            .flat_map(|line| line.bytes())
+            .for_each(|byte| builder.add(byte == b'L'));
 
         SeatLayout {
             width,
@@ -55,29 +45,62 @@ impl SeatLayout {
     }
 
     fn count_occupied(&self) -> usize {
-        (1..(self.height - 1))
-            .flat_map(|y| (1..(self.width - 1)).map(move |x| self.get_index(x, y)))
-            .map(|index| (self.get_seat(index) & OCCUPIED_BITS) as usize)
-            .sum::<usize>()
+        let mut count = 0;
+
+        for y in 1..=self.height {
+            for x in 1..=self.width {
+                count += (self.get_seat(x, y, FLOOR_BITS) & OCCUPIED_BITS) as usize
+            }
+        }
+
+        count
     }
 
-    fn simulate(&mut self) -> bool {
+    fn simulate_v1(&mut self) -> bool {
         let mut changed = false;
         let mut buckets = self.buckets.clone();
 
-        for y in 1..(self.height - 1) {
-            for x in 1..(self.width - 1) {
-                let index = self.get_index(x, y);
-
-                match self.get_seat(index) {
-                    EMPTY_BITS if self.count_adjacent_occupied(index) == 0 => {
+        for y in 1..=self.height {
+            for x in 1..=self.width {
+                match self.get_seat(x, y, FLOOR_BITS) {
+                    EMPTY_BITS if self.count_adjacent_occupied_v1(x, y) == 0 => {
                         // set occupied
                         changed = true;
+                        let index = self.get_index(x, y);
                         buckets[index / BUCKET_SIZE] |= 1 << (index % BUCKET_SIZE)
                     }
-                    OCCUPIED_BITS if self.count_adjacent_occupied(index) >= 4 => {
+                    OCCUPIED_BITS if self.count_adjacent_occupied_v1(x, y) >= 4 => {
                         // set empty
                         changed = true;
+                        let index = self.get_index(x, y);
+                        buckets[index / BUCKET_SIZE] &= !(1 << (index % BUCKET_SIZE))
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        self.buckets = buckets;
+        changed
+    }
+
+    fn simulate_v2(&mut self) -> bool {
+        let mut changed = false;
+        let mut buckets = self.buckets.clone();
+
+        for y in 1..=self.height {
+            for x in 1..=self.width {
+                match self.get_seat(x, y, FLOOR_BITS) {
+                    EMPTY_BITS if self.count_adjacent_occupied_v2(x, y) == 0 => {
+                        // set occupied
+                        changed = true;
+                        let index = self.get_index(x, y);
+                        buckets[index / BUCKET_SIZE] |= 1 << (index % BUCKET_SIZE)
+                    }
+                    OCCUPIED_BITS if self.count_adjacent_occupied_v2(x, y) >= 5 => {
+                        // set empty
+                        changed = true;
+                        let index = self.get_index(x, y);
                         buckets[index / BUCKET_SIZE] &= !(1 << (index % BUCKET_SIZE))
                     }
                     _ => {}
@@ -90,27 +113,64 @@ impl SeatLayout {
     }
 
     fn get_index(&self, x: usize, y: usize) -> usize {
-        (x + y * self.width) * 2
+        if x > 0 && x <= self.width && y > 0 && y <= self.height {
+            ((x - 1) + (y - 1) * self.width) * 2
+        } else {
+            usize::MAX
+        }
     }
 
-    fn get_seat(&self, index: usize) -> u8 {
-        (self.buckets[index / BUCKET_SIZE] >> (index % BUCKET_SIZE) & SEAT_MASK) as u8
+    fn get_seat(&self, x: usize, y: usize, default: u8) -> u8 {
+        let index = self.get_index(x, y);
+
+        if index == usize::MAX {
+            default
+        } else {
+            (self.buckets[index / BUCKET_SIZE] >> (index % BUCKET_SIZE) & SEAT_MASK) as u8
+        }
     }
 
-    fn count_adjacent_occupied(&self, index: usize) -> usize {
-        let top = index - self.width * 2;
-        let bottom = index + self.width * 2;
-
-        let count = (self.get_seat(index - 2) & OCCUPIED_BITS)
-            + (self.get_seat(index + 2) & OCCUPIED_BITS)
-            + (self.get_seat(top) & OCCUPIED_BITS)
-            + (self.get_seat(top - 2) & OCCUPIED_BITS)
-            + (self.get_seat(top + 2) & OCCUPIED_BITS)
-            + (self.get_seat(bottom) & OCCUPIED_BITS)
-            + (self.get_seat(bottom - 2) & OCCUPIED_BITS)
-            + (self.get_seat(bottom + 2) & OCCUPIED_BITS);
+    fn count_adjacent_occupied_v1(&self, x: usize, y: usize) -> usize {
+        let count = (self.get_seat(x - 1, y - 1, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x, y - 1, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x + 1, y - 1, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x - 1, y, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x + 1, y, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x - 1, y + 1, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x, y + 1, FLOOR_BITS) & OCCUPIED_BITS)
+            + (self.get_seat(x + 1, y + 1, FLOOR_BITS) & OCCUPIED_BITS);
 
         count as usize
+    }
+
+    fn count_adjacent_occupied_v2(&self, x: usize, y: usize) -> usize {
+        let count = self.find_adjacent_seat(x, y, |x, y| (x - 1, y - 1))
+            + self.find_adjacent_seat(x, y, |x, y| (x, y - 1))
+            + self.find_adjacent_seat(x, y, |x, y| (x + 1, y - 1))
+            + self.find_adjacent_seat(x, y, |x, y| (x - 1, y))
+            + self.find_adjacent_seat(x, y, |x, y| (x + 1, y))
+            + self.find_adjacent_seat(x, y, |x, y| (x - 1, y + 1))
+            + self.find_adjacent_seat(x, y, |x, y| (x, y + 1))
+            + self.find_adjacent_seat(x, y, |x, y| (x + 1, y + 1));
+
+        count as usize
+    }
+
+    fn find_adjacent_seat<F>(&self, mut x: usize, mut y: usize, f: F) -> u8
+    where
+        F: Fn(usize, usize) -> (usize, usize),
+    {
+        loop {
+            let next = f(x, y);
+            x = next.0;
+            y = next.1;
+
+            match self.get_seat(x, y, EMPTY_BITS) {
+                OCCUPIED_BITS => break OCCUPIED_BITS,
+                EMPTY_BITS => break EMPTY_BITS,
+                _ => {}
+            }
+        }
     }
 }
 
