@@ -20,3 +20,25 @@ pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
 
     Ok(best_id * min_wait_time)
 }
+
+pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
+    let mut time = 0u64;
+    let mut step = 1u64;
+
+    for (i, id) in input[1].split(',').enumerate() {
+        if id.starts_with('x') {
+            continue;
+        }
+
+        let id = id.parse::<u64>()?;
+        let offset = i as u64;
+
+        while (time + offset) % id != 0 {
+            time += step;
+        }
+
+        step *= id;
+    }
+
+    Ok(time)
+}
