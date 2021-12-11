@@ -131,10 +131,12 @@ impl SeatLayout {
             + (self.find_adjacent_seat(x, y, |x, y| (x + 1, y + 1)) == Seat::Occupied) as usize
     }
 
-    fn find_adjacent_seat<F>(&self, mut x: usize, mut y: usize, f: F) -> Seat
-    where
-        F: Fn(usize, usize) -> (usize, usize),
-    {
+    fn find_adjacent_seat(
+        &self,
+        mut x: usize,
+        mut y: usize,
+        f: impl Fn(usize, usize) -> (usize, usize),
+    ) -> Seat {
         loop {
             let next = f(x, y);
             x = next.0;

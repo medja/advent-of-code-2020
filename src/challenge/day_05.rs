@@ -35,10 +35,7 @@ impl Add<u16> for Seat {
     }
 }
 
-fn find_missing_seat<I>(seats: I) -> Option<Seat>
-where
-    I: IntoIterator<Item = Seat>,
-{
+fn find_missing_seat(seats: impl IntoIterator<Item = Seat>) -> Option<Seat> {
     let mut iterator = seats.into_iter();
     let mut previous: Seat = iterator.next()?;
 

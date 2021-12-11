@@ -26,10 +26,7 @@ fn validate_b(entry: &Entry) -> bool {
     first ^ second
 }
 
-fn count_valid<P>(input: &[&str], predicate: P) -> usize
-where
-    P: Fn(&Entry) -> bool,
-{
+fn count_valid(input: &[&str], predicate: impl Fn(&Entry) -> bool) -> usize {
     input
         .iter()
         .filter_map(|&line| Entry::try_from(line).ok())

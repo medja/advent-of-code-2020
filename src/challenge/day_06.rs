@@ -8,10 +8,7 @@ pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
     Ok(sum_answer_counts(input, Answers::bitand))
 }
 
-fn sum_answer_counts<F>(input: &[&str], f: F) -> usize
-where
-    F: Fn(Answers, Answers) -> Answers + Copy,
-{
+fn sum_answer_counts(input: &[&str], f: impl Fn(Answers, Answers) -> Answers + Copy) -> usize {
     input
         .split(|line| line.is_empty())
         .map(|lines| {
