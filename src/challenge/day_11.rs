@@ -1,16 +1,317 @@
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    let mut layout = SeatLayout::new(input);
-    while layout.simulate_v1() {}
+    let mut layout = SeatLayoutBuilder::new(input).build(false);
+    while layout.simulate(false) {}
     Ok(layout.count_occupied())
 }
 
 pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    let mut layout = SeatLayout::new(input);
-    while layout.simulate_v2() {}
+    let mut layout = SeatLayoutBuilder::new(input).build(true);
+    while layout.simulate(true) {}
     Ok(layout.count_occupied())
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+struct Seat {
+    index: usize,
+    neighbors: [usize; 8],
+}
+
+impl Seat {
+    fn new(index: usize, neighbors: [usize; 8]) -> Self {
+        Seat { index, neighbors }
+    }
+
+    fn index(&self) -> usize {
+        self.index
+    }
+
+    fn occupied_neighbors(&self, occupied: &[bool]) -> usize {
+        self.neighbors
+            .iter()
+            .filter(|index| occupied[**index])
+            .count()
+    }
+}
+
+struct SeatLayout {
+    seats: Vec<Seat>,
+    occupied: Vec<bool>,
+}
+
+impl SeatLayout {
+    fn new(width: usize, height: usize, seats: Vec<Seat>) -> Self {
+        let occupied = vec![false; width * height + 1];
+        SeatLayout { seats, occupied }
+    }
+
+    fn simulate(&mut self, extended: bool) -> bool {
+        let limit = if extended { 5 } else { 4 };
+
+        let mut changed = false;
+        let mut occupied = self.occupied.clone();
+
+        for seat in &self.seats {
+            let count = seat.occupied_neighbors(&self.occupied);
+
+            if self.occupied[seat.index()] {
+                if count >= limit {
+                    changed = true;
+                    occupied[seat.index()] = false;
+                }
+            } else if count == 0 {
+                changed = true;
+                occupied[seat.index()] = true;
+            }
+        }
+
+        self.occupied = occupied;
+        changed
+    }
+
+    fn count_occupied(&self) -> usize {
+        self.occupied.iter().filter(|occupied| **occupied).count()
+    }
+}
+
+struct SeatLayoutBuilder {
+    width: usize,
+    height: usize,
+    seats: Vec<bool>,
+}
+
+impl SeatLayoutBuilder {
+    fn new(input: &[&str]) -> Self {
+        let width = input[0].len();
+        let height = input.len();
+
+        let seats = input
+            .iter()
+            .flat_map(|line| line.bytes())
+            .map(|byte| byte == b'L')
+            .collect::<Vec<_>>();
+
+        SeatLayoutBuilder {
+            width,
+            height,
+            seats,
+        }
+    }
+
+    fn build(&self, extended: bool) -> SeatLayout {
+        let mut seats = Vec::with_capacity(self.seats.len());
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let index = x + y * self.width;
+
+                if self.seats[index] {
+                    let neighbors = if extended {
+                        self.find_visible_neighbors(x, y, index)
+                    } else {
+                        self.find_direct_neighbors(x, y, index)
+                    };
+
+                    seats.push(Seat::new(index, neighbors));
+                }
+            }
+        }
+
+        SeatLayout::new(self.width, self.height, seats)
+    }
+
+    fn find_direct_neighbors(&self, x: usize, y: usize, index: usize) -> [usize; 8] {
+        let mut count = 0;
+        let mut neighbors = [self.width * self.height; 8];
+
+        if y > 0 {
+            let index = index - self.width;
+
+            if x > 0 {
+                neighbors[count] = index - 1;
+                count += 1;
+            }
+
+            neighbors[count] = index;
+            count += 1;
+
+            if x + 1 < self.width {
+                neighbors[count] = index + 1;
+                count += 1;
+            }
+        }
+
+        if x > 0 {
+            neighbors[count] = index - 1;
+            count += 1;
+        }
+
+        if x + 1 < self.width {
+            neighbors[count] = index + 1;
+            count += 1;
+        }
+
+        if y + 1 < self.height {
+            let index = index + self.width;
+
+            if x > 0 {
+                neighbors[count] = index - 1;
+                count += 1;
+            }
+
+            neighbors[count] = index;
+            count += 1;
+
+            if x + 1 < self.width {
+                neighbors[count] = index + 1;
+            }
+        }
+
+        neighbors
+    }
+
+    fn find_visible_neighbors(&self, x: usize, y: usize, index: usize) -> [usize; 8] {
+        let mut count = 0;
+        let mut neighbors = [self.width * self.height; 8];
+
+        {
+            let mut x = x;
+            let mut y = y;
+            let mut index = index;
+
+            while x > 0 && y > 0 {
+                x -= 1;
+                y -= 1;
+                index -= self.width + 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut y = y;
+            let mut index = index;
+
+            while y > 0 {
+                y -= 1;
+                index -= self.width;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut x = x;
+            let mut y = y;
+            let mut index = index;
+
+            while x + 1 < self.width && y > 0 {
+                x += 1;
+                y -= 1;
+                index -= self.width - 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut x = x;
+            let mut index = index;
+
+            while x > 0 {
+                x -= 1;
+                index -= 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut x = x;
+            let mut index = index;
+
+            while x + 1 < self.width {
+                x += 1;
+                index += 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut x = x;
+            let mut y = y;
+            let mut index = index;
+
+            while x > 0 && y + 1 < self.height {
+                x -= 1;
+                y += 1;
+                index += self.width - 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut y = y;
+            let mut index = index;
+
+            while y + 1 < self.height {
+                y += 1;
+                index += self.width;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    count += 1;
+                    break;
+                }
+            }
+        }
+
+        {
+            let mut x = x;
+            let mut y = y;
+            let mut index = index;
+
+            while x + 1 < self.width && y + 1 < self.height {
+                x += 1;
+                y += 1;
+                index += self.width + 1;
+
+                if self.seats[index] {
+                    neighbors[count] = index;
+                    break;
+                }
+            }
+        }
+
+        neighbors
+    }
+}
+
+/*#[derive(Copy, Clone, Eq, PartialEq)]
 enum Seat {
     Empty,
     Occupied,
@@ -149,4 +450,4 @@ impl SeatLayout {
             }
         }
     }
-}
+}*/
