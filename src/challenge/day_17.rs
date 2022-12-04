@@ -28,12 +28,11 @@ struct Point<const D: usize>([isize; D]);
 
 impl<const D: usize> Point<D> {
     fn index(&self) -> usize {
-        self.0.iter()
+        self.0
+            .iter()
             .enumerate()
             .rev()
-            .fold(0, |sum, (index, value)| {
-                sum * get_length(index) + value
-            }) as usize
+            .fold(0, |sum, (index, value)| sum * get_length(index) + value) as usize
     }
 
     fn fill_neighbors(&self, points: &mut Vec<Self>) {
@@ -48,7 +47,8 @@ impl<const D: usize> Point<D> {
             let max = (self.0[index] + 1).min(get_length(index) - 1);
 
             for value in min..=max {
-                self.update(index, value).fill_neighbors_at_index(origin, points, index + 1);
+                self.update(index, value)
+                    .fill_neighbors_at_index(origin, points, index + 1);
             }
         } else if origin != &self {
             points.push(self);
@@ -89,7 +89,11 @@ impl<const D: usize, const V: usize> PocketDimension<D, V> {
             }
         }
 
-        PocketDimension { count, cubes, buffer }
+        PocketDimension {
+            count,
+            cubes,
+            buffer,
+        }
     }
 
     fn simulate(&mut self) {

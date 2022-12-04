@@ -1,5 +1,6 @@
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    let result = input.iter()
+    let result = input
+        .iter()
         .map(|line| evaluate(line).map(|result| result.0).unwrap_or(0))
         .sum::<u64>();
 
@@ -36,7 +37,10 @@ fn take_number(input: &str) -> anyhow::Result<(u64, &str)> {
     } else {
         match input.find(|char: char| !char.is_ascii_digit()) {
             None => Ok((input.parse()?, "")),
-            Some(index) => Ok((input[..index].parse()?, input[index..].trim_start_matches(' ')))
+            Some(index) => Ok((
+                input[..index].parse()?,
+                input[index..].trim_start_matches(' '),
+            )),
         }
     }
 }
