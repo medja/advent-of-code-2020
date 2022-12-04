@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use std::mem::size_of;
 use std::str::FromStr;
 
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
@@ -191,7 +190,7 @@ impl FromStr for Instruction {
     }
 }
 
-const BUCKET_SIZE: usize = size_of::<usize>() * 8;
+const BUCKET_SIZE: usize = usize::BITS as usize;
 
 #[derive(Clone)]
 struct BitSet(Vec<usize>);

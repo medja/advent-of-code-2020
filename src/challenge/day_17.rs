@@ -56,7 +56,7 @@ impl<const D: usize> Point<D> {
     }
 
     fn update(&self, index: usize, value: isize) -> Self {
-        let mut values = self.0.clone();
+        let mut values = self.0;
         values[index] = value;
         Point(values)
     }
@@ -122,11 +122,9 @@ impl<const D: usize, const V: usize> PocketDimension<D, V> {
                     self.count += 1;
                     self.buffer[index] = true;
                 }
-            } else {
-                if count == 3 {
-                    self.count += 1;
-                    self.buffer[index] = true;
-                }
+            } else if count == 3 {
+                self.count += 1;
+                self.buffer[index] = true;
             }
         } else {
             for value in 0..get_length(index) {
