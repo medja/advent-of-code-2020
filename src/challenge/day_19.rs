@@ -1,201 +1,139 @@
 use anyhow::Context;
+use regex::Regex;
+
+const MAX_LOOPS: usize = 10;
 
 pub fn part_a(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    let (rules, input) = parse_and_input(input, false)?;
-    Ok(input.iter().filter(|line| rules.test(line)).count())
+    let (rules, input) = parse_regex_and_input(input, false)?;
+    Ok(input.iter().filter(|line| rules.is_match(line)).count())
 }
 
 pub fn part_b(input: &[&str]) -> anyhow::Result<impl std::fmt::Display> {
-    let (rules, input) = parse_and_input(input, true)?;
-    Ok(input.iter().filter(|line| rules.test(line)).count())
+    let (rules, input) = parse_regex_and_input(input, true)?;
+    Ok(input.iter().filter(|line| rules.is_match(line)).count())
 }
 
-fn parse_and_input<'a>(
+fn parse_regex_and_input<'a>(
     input: &'a [&'a str],
     with_loops: bool,
-) -> anyhow::Result<(Rules, &'a [&'a str])> {
+) -> anyhow::Result<(Regex, &'a [&'a str])> {
     let index = input
         .iter()
         .position(|line| line.is_empty())
         .context("Input does not contain an empty line")?;
 
-    let rules = Rules::parse(&input[..index], with_loops)?;
-    Ok((rules, &input[index + 1..]))
+    Ok((
+        parse_regex(&input[..index], with_loops)?,
+        &input[index + 1..],
+    ))
 }
 
-struct Rules(Vec<Pattern>);
+fn parse_regex(input: &[&str], with_loops: bool) -> anyhow::Result<Regex> {
+    let mut rules = vec![""; input.len()];
 
-impl Rules {
-    fn parse(input: &[&str], with_loops: bool) -> anyhow::Result<Self> {
-        let mut patterns = vec![Pattern::Literal('\0'); input.len()];
-
-        for line in input {
-            let (id, pattern) = Pattern::parse(line)?;
-            patterns[id] = pattern;
-        }
-
-        if with_loops {
-            patterns[8] = Pattern::Double(Combination::parse("42")?, Combination::parse("42 8")?);
-            patterns[11] = Pattern::Double(
-                Combination::parse("42 31")?,
-                Combination::parse("42 11 31")?,
-            );
-        }
-
-        Ok(Rules(patterns))
-    }
-
-    fn test(&self, input: &str) -> bool {
-        self.0[0].test(input, 0, &self.0).contains(input.len())
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-enum Pattern {
-    Literal(char),
-    Single(Combination),
-    Double(Combination, Combination),
-}
-
-impl Pattern {
-    fn parse(input: &str) -> anyhow::Result<(usize, Self)> {
-        let (id, input) = input
+    for line in input {
+        let (id, line) = line
             .split_once(':')
-            .with_context(|| format!("{} does not contain a :", input))?;
+            .with_context(|| format!("{} does not contain a :", line))?;
 
-        let id = id.parse()?;
-
-        let pattern = match input.split_once('|') {
-            None if input.as_bytes()[1] == b'"' => {
-                Pattern::Literal(input[2..].chars().next().unwrap())
-            }
-            None => Pattern::Single(Combination::parse(input)?),
-            Some((first, second)) => {
-                Pattern::Double(Combination::parse(first)?, Combination::parse(second)?)
-            }
-        };
-
-        Ok((id, pattern))
+        rules[id.parse::<usize>()?] = &line[1..];
     }
 
-    fn test(&self, input: &str, start: usize, rules: &[Pattern]) -> BitSet {
-        if start >= input.len() {
-            return BitSet::empty();
-        }
+    let mut builder = String::new();
+    builder.push('^');
+    build_rule(0, &rules, &mut builder, with_loops)?;
+    builder.push('$');
 
-        match self {
-            Pattern::Literal(literal) => {
-                if input[start..].starts_with(*literal) {
-                    BitSet::single(start + 1)
-                } else {
-                    BitSet::empty()
-                }
-            }
-            Pattern::Single(combination) => combination.test(input, start, rules),
-            Pattern::Double(first, second) => first
-                .test(input, start, rules)
-                .union(&second.test(input, start, rules)),
-        }
-    }
+    Ok(Regex::new(&builder)?)
 }
 
-#[derive(Copy, Clone, Debug)]
-struct Combination {
-    length: usize,
-    references: [usize; 3],
-}
-
-impl Combination {
-    fn parse(input: &str) -> anyhow::Result<Self> {
-        let mut i = 0;
-        let mut references = [0usize; 3];
-
-        for value in input.split_ascii_whitespace() {
-            references[i] = value.parse()?;
-            i += 1;
-        }
-
-        let combination = Combination {
-            length: i,
-            references,
-        };
-
-        Ok(combination)
-    }
-
-    fn test(&self, input: &str, start: usize, rules: &[Pattern]) -> BitSet {
-        (0..self.length).fold(BitSet::single(start), |set, i| {
-            set.iter().fold(BitSet::empty(), |set, start| {
-                set.union(&rules[self.references[i]].test(input, start, rules))
-            })
-        })
-    }
-}
-
-struct BitSet(u64, u64);
-
-impl BitSet {
-    fn empty() -> Self {
-        BitSet(0, 0)
-    }
-
-    fn single(index: usize) -> Self {
-        BitSet::empty().insert(index)
-    }
-
-    fn insert(mut self, index: usize) -> Self {
-        if index > 64 {
-            self.1 |= 1 << (index - 64);
-        } else {
-            self.0 |= 1 << index;
-        }
-
-        self
-    }
-
-    fn union(mut self, other: &Self) -> Self {
-        self.0 |= other.0;
-        self.1 |= other.1;
-        self
-    }
-
-    fn contains(&self, index: usize) -> bool {
-        if index > 64 {
-            (self.1 & (1 << (index - 64))) != 0
-        } else {
-            (self.0 & (1 << index)) != 0
-        }
-    }
-
-    fn iter(&self) -> impl Iterator<Item = usize> + '_ {
-        BitSetIterator {
-            index: 0,
-            set: self,
-        }
-    }
-}
-
-struct BitSetIterator<'a> {
+fn build_rule(
     index: usize,
-    set: &'a BitSet,
+    rules: &[&str],
+    builder: &mut String,
+    with_loops: bool,
+) -> anyhow::Result<()> {
+    let rule = rules[index];
+
+    if with_loops {
+        if index == 8 {
+            build_rule_8(rules, builder, with_loops)?;
+            return Ok(());
+        } else if index == 11 {
+            build_rule_11(rules, builder, with_loops)?;
+            return Ok(());
+        }
+    }
+
+    if rule.starts_with('"') {
+        builder.push(rule.chars().nth(1).context("Unexpected end of input")?);
+        return Ok(());
+    }
+
+    match rule.split_once('|') {
+        None => build_pattern(rule, rules, builder, with_loops)?,
+        Some((first, second)) => {
+            builder.push('(');
+            build_pattern(first, rules, builder, with_loops)?;
+            builder.push('|');
+            build_pattern(second, rules, builder, with_loops)?;
+            builder.push(')');
+        }
+    }
+
+    Ok(())
 }
 
-impl Iterator for BitSetIterator<'_> {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut i = self.index;
-
-        while i < 128 {
-            if self.set.contains(i) {
-                self.index = i + 1;
-                return Some(i);
-            }
-
-            i += 1;
-        }
-
-        self.index = i;
-        None
+fn build_pattern(
+    pattern: &str,
+    rules: &[&str],
+    builder: &mut String,
+    with_loops: bool,
+) -> anyhow::Result<()> {
+    for id in pattern.split_ascii_whitespace() {
+        build_rule(id.parse()?, rules, builder, with_loops)?;
     }
+
+    Ok(())
+}
+
+fn build_rule_8(rules: &[&str], builder: &mut String, with_loops: bool) -> anyhow::Result<()> {
+    builder.push('(');
+    build_rule(42, rules, builder, with_loops)?;
+    builder.push(')');
+    builder.push('+');
+    Ok(())
+}
+
+fn build_rule_11(rules: &[&str], builder: &mut String, with_loops: bool) -> anyhow::Result<()> {
+    let mut builder_42 = String::new();
+    let mut builder_31 = String::new();
+    build_rule(42, rules, &mut builder_42, with_loops)?;
+    build_rule(31, rules, &mut builder_31, with_loops)?;
+
+    builder.push('(');
+    build_rule_11_combination(1, &builder_42, &builder_31, builder);
+
+    for i in 2..MAX_LOOPS {
+        builder.push('|');
+        build_rule_11_combination(i, &builder_42, &builder_31, builder);
+    }
+
+    builder.push(')');
+
+    Ok(())
+}
+
+fn build_rule_11_combination(count: usize, rule_42: &str, rule_31: &str, builder: &mut String) {
+    builder.push('(');
+
+    for _ in 0..count {
+        builder.push_str(rule_42);
+    }
+
+    for _ in 0..count {
+        builder.push_str(rule_31);
+    }
+
+    builder.push(')');
 }
