@@ -45,7 +45,21 @@ fn play(mut santa: Deck, mut crab: Deck) -> (bool, Deck) {
             santa_card as usize <= santa.card_count() && crab_card as usize <= crab.card_count();
 
         let santa_wins = if recurse {
-            play(santa.copy(santa_card), crab.copy(crab_card)).0
+            let max_santa = santa.best_card(santa_card);
+            let max_crab = crab.best_card(crab_card);
+
+            // Optimization:
+            // If Santa holds the highest card of the two decks and that card exceeds the length of
+            // both of the new decks, he always wins.
+            // This happens because the highest card can only be lost during a recursive game, and a
+            // recursive game is only possible when the number of cards in the deck is at least as
+            // many as the card's value.
+            // This doesn't apply to crab due to the infinite game prevention rule.
+            if max_santa > max_crab && max_santa > santa_card + crab_card - 2 {
+                true
+            } else {
+                play(santa.copy(santa_card), crab.copy(crab_card)).0
+            }
         } else {
             santa_card.cmp(&crab_card) == Ordering::Greater
         };
@@ -101,6 +115,10 @@ impl Deck {
 
     fn copy(&self, count: u8) -> Self {
         Deck(self.0.iter().take(count as usize).copied().collect())
+    }
+
+    fn best_card(&self, count: u8) -> u8 {
+        *self.0.iter().take(count as usize).max().unwrap()
     }
 
     fn score(&mut self) -> usize {
