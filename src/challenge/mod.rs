@@ -27,6 +27,7 @@ mod day_18;
 mod day_19;
 mod day_20;
 mod day_21;
+mod day_22;
 
 lazy_static! {
     static ref CHALLENGE_PATTERN: Regex =
@@ -79,6 +80,7 @@ lazy_static! {
         solutions.add(Day20, PartB, day_20::part_b);
         solutions.add(Day21, PartA, day_21::part_a);
         solutions.add(Day21, PartB, day_21::part_b);
+        solutions.add(Day22, PartA, day_22::part_a);
 
         solutions
     };
@@ -110,6 +112,7 @@ pub enum Day {
     Day19 = 19,
     Day20 = 20,
     Day21 = 21,
+    Day22 = 22,
 }
 
 impl Day {
@@ -138,6 +141,7 @@ impl Day {
             Day19 => "Monster Messages",
             Day20 => "Jurassic Jigsaw",
             Day21 => "Allergen Assessment",
+            Day22 => "Crab Combat",
         }
     }
 
